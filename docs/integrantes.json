@@ -1,0 +1,15 @@
+{
+  "proyecto": "SafeSite",
+  "subtitulo": "Sistema de monitoreo de Equipo de Protección Personal (EPP) en tiempo real para el sector construcción",
+  "universidad": "Universidad Gerardo Barrios",
+  "facultad": "Facultad de Ciencias y Tecnología",
+  "carrera": "Ingeniería en Sistemas y Redes Informáticas",
+  "asignatura": "[Nombre de la asignatura]",
+  "docente": "[Nombre del docente]",
+  "fecha": "Noviembre de 2026",
+  "integrantes": [
+    {"nombre": "César Alejandro Escobar Recinos", "carnet": "[Carnet]"},
+    {"nombre": "[Nombre del integrante 2]", "carnet": "[Carnet]"},
+    {"nombre": "[Nombre del integrante 3]", "carnet": "[Carnet]"}
+  ]
+}

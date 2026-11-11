@@ -1,0 +1,2 @@
+# Solo para regenerar el PDF: python docs/generar_documento.py
+reportlab>=4.0

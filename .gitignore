@@ -1,0 +1,20 @@
+# Entorno virtual y caché de Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Datos generados en ejecución
+infracciones.db
+capturas/*
+!capturas/.gitkeep
+
+# Modelos descargados o entrenados (pesados)
+*.pt
+!models/.gitkeep
+
+# Editores y sistema
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

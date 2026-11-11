@@ -1,1 +1,6 @@
-PyQt6
+# SafeSite - dependencias del proyecto (Python 3.10+)
+opencv-python>=4.8
+ultralytics>=8.0
+pygame-ce>=2.4
+numpy>=1.24
+PyQt6>=6.5

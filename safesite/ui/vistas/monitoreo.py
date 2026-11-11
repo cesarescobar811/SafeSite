@@ -1,7 +1,7 @@
 """monitoreo.py - Vista de monitoreo en vivo (solo interfaz)."""
 from datetime import datetime
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QImage
 from PyQt6.QtWidgets import (
     QCheckBox, QGridLayout, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
@@ -24,7 +24,7 @@ class VistaMonitoreo(QWidget):
         actualizar_estado(dict) con claves:
             camara(bool), personas(int), cumplen(int), incumplen(int),
             fps(float), infraccion(bool), alarma("SONANDO"|"SILENCIADA"|"APAGADA")
-        establecer_ejecucion(bool)
+        establecer_ejecucion(bool), mostrar_cargando(), establecer_deteniendo()
         agregar_evento(texto, color)
     """
 
@@ -89,6 +89,8 @@ class VistaMonitoreo(QWidget):
         derecha.addWidget(lbl_eventos)
         self.lista_eventos = QListWidget()
         self.lista_eventos.setSelectionMode(QListWidget.SelectionMode.NoSelection)
+        self.lista_eventos.setWordWrap(True)
+        self.lista_eventos.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         derecha.addWidget(self.lista_eventos, 1)
         raiz.addWidget(derecha_w)
 
@@ -115,7 +117,15 @@ class VistaMonitoreo(QWidget):
             for t in (self.t_personas, self.t_cumplen, self.t_incumplen, self.t_fps):
                 t.set_valor("—", GRIS)
             self.t_alarma.set_valor("Apagada", GRIS)
+        self.btn_toggle.setEnabled(True)
         refrescar_estilo(self.btn_toggle)
+
+    def mostrar_cargando(self) -> None:
+        self.banner.set_estado("CARGANDO MODELO…", AMARILLO)
+
+    def establecer_deteniendo(self) -> None:
+        self.btn_toggle.setEnabled(False)
+        self.btn_toggle.setText("Deteniendo…")
 
     def actualizar_estado(self, e: dict) -> None:
         camara_ok = e.get("camara", True)

@@ -148,7 +148,7 @@ class VistaAjustes(QWidget):
             self._settings.setValue(clave, valor)
         self._settings.sync()
         self.ajustes_guardados.emit(vals)
-        self.mensaje.emit("Ajustes guardados")
+        self.mensaje.emit("Ajustes guardados · se aplican al reiniciar el monitoreo")
 
     def restaurar(self) -> None:
         self.aplicar(AJUSTES_POR_DEFECTO)

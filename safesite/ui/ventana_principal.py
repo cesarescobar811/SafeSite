@@ -1,19 +1,24 @@
-"""ventana_principal.py - Ventana principal: sidebar, header y navegación."""
+"""ventana_principal.py - Ventana principal: sidebar, header, navegación y monitoreo."""
 from datetime import datetime
 
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QApplication, QButtonGroup, QFrame, QHBoxLayout, QLabel, QMainWindow,
-    QStackedWidget, QStatusBar, QVBoxLayout, QWidget,
+    QMessageBox, QStackedWidget, QStatusBar, QVBoxLayout, QWidget,
 )
 
-from safesite.config import AZUL, GRIS, NOMBRE_APP, SUBTITULO, VERDE, VERSION
-from safesite.datos.datos_prueba import generar_infracciones, pixmap_prueba
+from safesite.config import (
+    AMARILLO, GRIS, NOMBRE_APP, ROJO, SUBTITULO, VERDE, VERSION,
+)
+from safesite.datos import base_datos
+from safesite.nucleo.hilo_video import HiloVideo
 from safesite.ui.componentes import BotonNav, Insignia
 from safesite.ui.estilos import generar_qss
 from safesite.ui.vistas.ajustes import VistaAjustes
 from safesite.ui.vistas.historial import VistaHistorial
 from safesite.ui.vistas.monitoreo import VistaMonitoreo
+
+LIMITE_HISTORIAL = 200
 
 
 class VentanaPrincipal(QMainWindow):
@@ -23,10 +28,14 @@ class VentanaPrincipal(QMainWindow):
         self.resize(1280, 780)
         self.setMinimumSize(1020, 640)
 
+        base_datos.init_db()
+        self.hilo: HiloVideo | None = None
+
         # ---- Vistas ----
         self.vista_monitoreo = VistaMonitoreo()
         self.vista_historial = VistaHistorial()
         self.vista_ajustes = VistaAjustes()
+        self._ajustes = self.vista_ajustes.valores()  # ajustes guardados en disco
 
         # (texto del botón, título del header, vista)
         self._paginas = [
@@ -58,10 +67,10 @@ class VentanaPrincipal(QMainWindow):
         self.setStatusBar(QStatusBar())
 
         self._conectar_senales()
-        self._aplicar_tema(self.vista_ajustes.valores()["tema"])
-        self.vista_historial.set_datos(generar_infracciones())  # TODO fase 2: leer de SQLite
+        self._aplicar_tema(self._ajustes["tema"])
+        self._cargar_historial()
         self._ir_a(0)
-        self.statusBar().showMessage("Listo · fase 1: interfaz sin lógica de visión", 6000)
+        self.statusBar().showMessage("Listo · pulsa «Iniciar monitoreo» para comenzar", 8000)
 
         # Reloj del header
         self._timer_reloj = QTimer(self)
@@ -119,14 +128,14 @@ class VentanaPrincipal(QMainWindow):
         return h
 
     def _conectar_senales(self) -> None:
-        # Fase 2: aquí se conectará el hilo de video y la base de datos real.
-        self.vista_monitoreo.iniciar_solicitado.connect(self._iniciar_demo)
-        self.vista_monitoreo.detener_solicitado.connect(self._detener_demo)
+        m = self.vista_monitoreo
+        m.iniciar_solicitado.connect(self._iniciar_monitoreo)
+        m.detener_solicitado.connect(self._detener_monitoreo)
+        m.silenciar_cambiado.connect(self._al_silenciar)
         self.vista_ajustes.ajustes_guardados.connect(self._al_guardar_ajustes)
         for vista in (self.vista_historial, self.vista_ajustes):
-            vista.mensaje.connect(lambda t: self.statusBar().showMessage(t, 6000))
-        self.vista_historial.refrescar_solicitado.connect(
-            lambda: self.vista_historial.set_datos(generar_infracciones()))
+            vista.mensaje.connect(lambda t: self.statusBar().showMessage(t, 8000))
+        self.vista_historial.refrescar_solicitado.connect(self._cargar_historial)
 
     # ------------------------- Navegación y tema -------------------------
     def _ir_a(self, indice: int) -> None:
@@ -138,24 +147,62 @@ class VentanaPrincipal(QMainWindow):
         QApplication.instance().setStyleSheet(generar_qss(tema))
 
     def _al_guardar_ajustes(self, valores: dict) -> None:
+        self._ajustes = valores
         self._aplicar_tema(valores["tema"])
-        # TODO fase 2: reconfigurar detector/cámara/alarma con 'valores'
 
     def _actualizar_reloj(self) -> None:
         self.lbl_reloj.setText(datetime.now().strftime("%d/%m/%Y  %H:%M:%S"))
 
-    # ------------------------- Demo (se reemplaza en la fase 2) -------------------------
-    def _iniciar_demo(self) -> None:
+    # ------------------------- Historial -------------------------
+    def _cargar_historial(self) -> None:
+        self.vista_historial.set_datos(base_datos.listar_infracciones(LIMITE_HISTORIAL))
+
+    # ------------------------- Monitoreo real -------------------------
+    def _iniciar_monitoreo(self) -> None:
         m = self.vista_monitoreo
         m.establecer_ejecucion(True)
-        m.mostrar_frame(pixmap_prueba("VISTA PREVIA", color="#2ecc71").toImage())
-        m.actualizar_estado({"camara": True, "personas": 2, "cumplen": 2, "incumplen": 0,
-                             "fps": 14.8, "infraccion": False, "alarma": "APAGADA"})
-        m.agregar_evento("Monitoreo iniciado (demo)", VERDE)
-        self.insignia_sistema.set_estado("●  ACTIVO", VERDE)
+        self.insignia_sistema.set_estado("●  INICIANDO", AMARILLO)
 
-    def _detener_demo(self) -> None:
-        m = self.vista_monitoreo
-        m.establecer_ejecucion(False)
-        m.agregar_evento("Monitoreo detenido", AZUL)
+        self.hilo = HiloVideo(self._ajustes, silenciar=m.chk_silenciar.isChecked())
+        self.hilo.cargando.connect(m.mostrar_cargando)
+        self.hilo.frame_listo.connect(m.mostrar_frame)
+        self.hilo.estado.connect(self._al_estado)
+        self.hilo.evento.connect(m.agregar_evento)
+        self.hilo.nueva_infraccion.connect(self._cargar_historial_sin_args)
+        self.hilo.error.connect(self._al_error)
+        self.hilo.finished.connect(self._al_finalizar)
+        self.hilo.start()
+
+    def _detener_monitoreo(self) -> None:
+        if self.hilo is not None and self.hilo.isRunning():
+            self.hilo.detener()
+            self.vista_monitoreo.establecer_deteniendo()
+
+    def _al_silenciar(self, silenciar: bool) -> None:
+        if self.hilo is not None:
+            self.hilo.silenciar = silenciar
+
+    def _al_estado(self, e: dict) -> None:
+        self.vista_monitoreo.actualizar_estado(e)
+        if e["infraccion"]:
+            self.insignia_sistema.set_estado("●  ALERTA", ROJO)
+        else:
+            self.insignia_sistema.set_estado("●  ACTIVO", VERDE)
+
+    def _cargar_historial_sin_args(self, _id_registro: int) -> None:
+        self._cargar_historial()
+
+    def _al_error(self, mensaje: str) -> None:
+        QMessageBox.warning(self, NOMBRE_APP, mensaje)
+
+    def _al_finalizar(self) -> None:
+        self.vista_monitoreo.establecer_ejecucion(False)
+        self.vista_monitoreo.agregar_evento("Monitoreo detenido", GRIS)
         self.insignia_sistema.set_estado("●  DETENIDO", GRIS)
+
+    # ------------------------- Cierre -------------------------
+    def closeEvent(self, evento) -> None:
+        if self.hilo is not None and self.hilo.isRunning():
+            self.hilo.detener()
+            self.hilo.wait(5000)
+        evento.accept()
