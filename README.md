@@ -4,13 +4,6 @@
 
 Universidad Gerardo Barrios · Facultad de Ciencias y Tecnología · Ingeniería en Sistemas y Redes Informáticas
 
-## Integrantes
-
-| Nombre completo | Carnet |
-|---|---|
-| César Alejandro Escobar Recinos | [Carnet] |
-| [Nombre del integrante 2] | [Carnet] |
-| [Nombre del integrante 3] | [Carnet] |
 
 ## Descripción
 
