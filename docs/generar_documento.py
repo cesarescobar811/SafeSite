@@ -4,10 +4,13 @@ Los datos de la portada (integrantes, carnets, asignatura, docente, fecha) se le
 docs/integrantes.json. Para actualizar el PDF:
 
     pip install reportlab
-    python docs/generar_documento.py
+    python docs/generar_documento.py              # genera el PDF (avisa si faltan datos)
+    python docs/generar_documento.py --estricto   # no genera el PDF si quedan marcadores [..]
 """
+import argparse
 import json
 import os
+import sys
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT
@@ -382,9 +385,33 @@ def contenido():
 
 
 # ----------------------------------------------------------------------------
-def generar():
+def campos_pendientes(datos: dict) -> list[str]:
+    """Campos de integrantes.json que aún tienen marcadores como [Carnet] o [apellidos]."""
+    pendientes = []
+    for clave in ("asignatura", "docente"):
+        if "[" in datos.get(clave, ""):
+            pendientes.append(f"{clave}: {datos[clave]}")
+    for i, integrante in enumerate(datos["integrantes"], 1):
+        for clave in ("nombre", "carnet"):
+            if "[" in integrante.get(clave, ""):
+                pendientes.append(f"integrante {i}, {clave}: {integrante[clave]}")
+    return pendientes
+
+
+def generar(estricto: bool = False) -> int:
+    """Genera el PDF. Devuelve 0 si todo salió bien y 1 si el modo estricto lo impidió."""
     with open(DATOS, encoding="utf-8") as f:
         datos = json.load(f)
+
+    pendientes = campos_pendientes(datos)
+    if pendientes:
+        print("AVISO: faltan datos por completar en docs/integrantes.json:")
+        for texto in pendientes:
+            print(f"  - {texto}")
+        if estricto:
+            print("No se generó el PDF (modo --estricto). Completa los datos y vuelve a ejecutar.")
+            return 1
+        print("Se generará el PDF de todos modos, con los marcadores visibles en la portada.\n")
 
     doc = Documento(
         SALIDA, pagesize=letter, leftMargin=MARGEN, rightMargin=MARGEN,
@@ -403,7 +430,15 @@ def generar():
     historia = portada_flowables(datos) + indice_flowables() + contenido()
     doc.multiBuild(historia)
     print(f"PDF generado: {SALIDA}")
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Genera el PDF del proyecto SafeSite.")
+    parser.add_argument("--estricto", action="store_true",
+                        help="no generar el PDF si quedan marcadores sin completar en integrantes.json")
+    return generar(estricto=parser.parse_args().estricto)
 
 
 if __name__ == "__main__":
-    generar()
+    sys.exit(main())
